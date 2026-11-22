@@ -4,6 +4,8 @@ Shelfdrop adalah panel desktop Linux Wayland untuk menaruh referensi berkas seme
 
 Gambar juga bisa diseret langsung dari halaman browser. Shelfdrop memakai data gambar yang diberikan browser atau mengunduh URL gambar HTTP/HTTPS secara anonim. Gambar raster hingga 16 MiB disimpan di `$XDG_CACHE_HOME/shelfdrop/browser-images/` (default `~/.cache/shelfdrop/browser-images/`) agar bisa dipratinjau, disalin, dan diseret keluar seperti berkas lokal. Aksi pembersihan shelf melepas referensinya. Salinan cache tetap tersedia untuk aplikasi yang sudah menerima berkas.
 
+Seret teks yang dipilih dari browser atau editor untuk menyimpan cuplikannya. Seret item teks ke editor atau gunakan Copy untuk mendapatkan teks asli. Shelfdrop menerima teks biasa UTF-8 hingga 1 MiB per drop. Teks mengikuti pengaturan Clear shelf on exit.
+
 ## Jalankan dari source
 
 Pasang Rust dan Cargo, kompiler sistem, `pkg-config`, serta GTK 4.8 atau lebih baru dengan paket pengembangan dan pemuat SVG GdkPixbuf. Pada Arch Linux paket utamanya adalah `rust`, `base-devel`, `gtk4`, dan `librsvg`. Pada Debian atau Ubuntu gunakan toolchain Rust terbaru bersama `build-essential`, `pkg-config`, `libgtk-4-dev`, dan `librsvg2-common`.

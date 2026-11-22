@@ -46,3 +46,5 @@ Tema Light dan Dark, Compact List, Expanded Grid, dan penyimpanan ukuran preset 
 Tes otomatis mencakup URI lokal, penolakan folder dan URI jarak jauh, Unicode, berkas tanpa ekstensi, duplikat, kapasitas, berkas hilang, state rusak, dan penyimpanan referensi. GNOME dengan Nautilus, KDE Plasma dengan Dolphin, skala 200%, dan pembaca layar masih perlu diuji. Pemeriksaan keyboard dilakukan saat bus AT-SPI pada sesi uji tidak tersedia.
 
 Impor gambar diuji pada Hyprland 0.57.2 dengan Chrome 155 dan Firefox 160 memakai backend Wayland. Drop PNG dari kedua browser menghasilkan thumbnail dan berkas lokal di cache. Sumber GTK Wayland yang hanya menawarkan `text/uri-list` berhasil mengimpor gambar dari server HTTP uji. PNG dari Firefox berhasil diseret dari Shelfdrop ke Thunar 4.20.10. Salinan tujuan cocok byte demi byte dan berkas cache tetap tersedia.
+
+Drag teks diuji pada Hyprland 0.57.2 dengan jendela GTK4 Wayland sebagai sumber dan tujuan. Teks UTF-8, spasi, dan baris baru cocok byte demi byte setelah drag masuk, Copy lewat Ctrl+C, dan drag keluar.

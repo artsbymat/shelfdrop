@@ -1,4 +1,5 @@
 use crate::browser_image::{BrowserImage, ImageBytes, MAX_BYTES};
+use crate::shelf::{Entry, MAX_TEXT_BYTES};
 use gtk::{gdk, gio, glib, prelude::*};
 
 pub fn provider(files: &[gio::File]) -> gdk::ContentProvider {
@@ -47,6 +48,11 @@ pub async fn reveal(file: &gio::File, context: &gio::AppLaunchContext) -> Result
     open(&file.parent().unwrap_or_else(|| file.clone()), context).await
 }
 
+pub fn text_provider(text: &str) -> gdk::ContentProvider {
+    gdk::ContentProvider::for_value(&text.to_value())
+}
+
+const TEXT_MIMES: &[&str] = &["text/plain;charset=utf-8", "text/plain", "UTF8_STRING"];
 const URI_LIST: &str = "text/uri-list";
 const FIREFOX_FILENAME: &str = "application/x-moz-file-promise-dest-filename";
 const BROWSER_URLS: &[&str] = &[
@@ -58,10 +64,14 @@ const BROWSER_URLS: &[&str] = &[
 pub enum DropData {
     Files(Vec<gio::File>),
     Image(BrowserImage),
+    Text(Entry),
 }
 
 pub fn can_receive(formats: &gdk::ContentFormats) -> bool {
     formats.contains_type(gdk::FileList::static_type())
+        || TEXT_MIMES
+            .iter()
+            .any(|mime| formats.contain_mime_type(mime))
         || formats.contain_mime_type(URI_LIST)
         || BROWSER_URLS
             .iter()
@@ -112,9 +122,10 @@ pub async fn receive(drop: &gdk::Drop) -> Result<DropData, String> {
         }
     }
 
-    if let Ok(value) = drop
-        .read_value_future(gdk::FileList::static_type(), glib::Priority::DEFAULT)
-        .await
+    if formats.contains_type(gdk::FileList::static_type())
+        && let Ok(value) = drop
+            .read_value_future(gdk::FileList::static_type(), glib::Priority::DEFAULT)
+            .await
         && let Ok(list) = value.get::<gdk::FileList>()
         && !list.files().is_empty()
     {
@@ -127,14 +138,24 @@ pub async fn receive(drop: &gdk::Drop) -> Result<DropData, String> {
         if list.contains('\0') {
             return Err("The file list is invalid.".into());
         }
-        let files = glib::Uri::list_extract_uris(list)
+        let files: Vec<_> = glib::Uri::list_extract_uris(list)
             .iter()
             .map(|uri| gio::File::for_uri(uri))
             .collect();
-        return Ok(classify(files));
+        if !files.is_empty() {
+            return Ok(classify(files));
+        }
     }
 
-    Err(last_error.unwrap_or_else(|| "The drop contains no files or browser images.".into()))
+    if let Some(mime) = TEXT_MIMES
+        .iter()
+        .find(|mime| formats.contain_mime_type(mime))
+    {
+        let bytes = read_bytes(drop, mime, MAX_TEXT_BYTES).await?;
+        let text = String::from_utf8(bytes).map_err(|_| "The dropped text is not valid UTF-8.")?;
+        return Entry::from_text(text).map(DropData::Text);
+    }
+    Err(last_error.unwrap_or_else(|| "The drop contains no supported items.".into()))
 }
 
 fn classify(files: Vec<gio::File>) -> DropData {

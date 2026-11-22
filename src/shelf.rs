@@ -1,4 +1,4 @@
-use gtk::{gio, prelude::*};
+use gtk::{gio, glib, prelude::*};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
@@ -8,11 +8,47 @@ pub struct Entry {
     pub name: String,
     pub content_type: String,
     pub size: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
     #[serde(skip)]
     pub missing: bool,
 }
 
+pub const MAX_TEXT_BYTES: usize = 1024 * 1024;
+
 impl Entry {
+    pub fn from_text(text: String) -> Result<Self, String> {
+        if text.len() > MAX_TEXT_BYTES {
+            return Err("Dropped text must be 1 MiB or smaller.".into());
+        }
+        if text.trim().is_empty() || text.contains('\0') {
+            return Err("The drop contains no usable text.".into());
+        }
+        let name: String = text
+            .trim()
+            .lines()
+            .next()
+            .unwrap_or_default()
+            .chars()
+            .filter(|ch| !ch.is_control())
+            .take(100)
+            .collect();
+        let hash = glib::compute_checksum_for_data(glib::ChecksumType::Sha256, text.as_bytes())
+            .expect("SHA-256 is supported");
+        Ok(Self {
+            uri: format!("shelfdrop-text:{hash}"),
+            name: if name.is_empty() {
+                "Plain text".into()
+            } else {
+                name
+            },
+            content_type: "text/plain".into(),
+            size: Some(text.len() as u64),
+            text: Some(text),
+            missing: false,
+        })
+    }
+
     pub fn file(&self) -> gio::File {
         gio::File::for_uri(&self.uri)
     }
@@ -54,6 +90,7 @@ pub async fn inspect(file: &gio::File) -> Result<Entry, Rejection> {
             .has_attribute("standard::size")
             .then(|| u64::try_from(info.size()).ok())
             .flatten(),
+        text: None,
         missing: false,
     })
 }
@@ -72,9 +109,9 @@ impl Added {
         let mut parts = Vec::new();
         let count = self.uris.len();
         if count == 1 {
-            parts.push("1 file added".into());
+            parts.push("1 item added".into());
         } else if count > 1 {
-            parts.push(format!("{count} files added"));
+            parts.push(format!("{count} items added"));
         }
         for (count, reason) in [
             (self.duplicates, "already on shelf"),
@@ -129,6 +166,21 @@ impl Shelf {
 mod tests {
     use super::*;
     use std::fs;
+
+    #[test]
+    fn text_entries_preserve_content_and_deduplicate() {
+        let text = "  Halo dunia ü\nbaris kedua\n";
+        let first = Entry::from_text(text.into()).unwrap();
+        assert_eq!(first.name, "Halo dunia ü");
+        assert_eq!(first.text.as_deref(), Some(text));
+        let mut shelf = Shelf::default();
+        let added = shelf.add([Ok(first), Ok(Entry::from_text(text.into()).unwrap())], 2);
+        assert_eq!(added.duplicates, 1);
+        assert_eq!(shelf.entries.len(), 1);
+        assert!(Entry::from_text(" \n".into()).is_err());
+        assert!(Entry::from_text("a\0b".into()).is_err());
+        assert!(Entry::from_text("a".repeat(MAX_TEXT_BYTES + 1)).is_err());
+    }
 
     #[test]
     fn mixed_batch_preserves_files_and_handles_limits_and_duplicates() {

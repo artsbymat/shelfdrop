@@ -85,12 +85,18 @@ impl Storage {
             let restored: Vec<Entry> = read(&self.entries, &mut errors).unwrap_or_default();
             restored
                 .into_iter()
+                .filter_map(|mut entry| {
+                    if let Some(text) = entry.text.take() {
+                        entry = Entry::from_text(text).ok()?;
+                    }
+                    Some(entry)
+                })
                 .filter(|entry| {
                     !entry.uri.contains('\0')
                         && !entry.name.contains('\0')
                         && !entry.content_type.contains('\0')
                         && seen.insert(entry.uri.clone())
-                        && local_file(&entry.file())
+                        && (entry.text.is_some() || local_file(&entry.file()))
                 })
                 .collect()
         };
@@ -173,18 +179,23 @@ mod tests {
         storage
             .save_entries(
                 false,
-                &[Entry {
-                    uri: "file:///tmp/missing.pdf".into(),
-                    name: "missing.pdf".into(),
-                    content_type: "application/pdf".into(),
-                    size: Some(12),
-                    missing: true,
-                }],
+                &[
+                    Entry {
+                        uri: "file:///tmp/missing.pdf".into(),
+                        name: "missing.pdf".into(),
+                        content_type: "application/pdf".into(),
+                        size: Some(12),
+                        text: None,
+                        missing: true,
+                    },
+                    Entry::from_text("  Halo \nbaris dua\n".into()).unwrap(),
+                ],
             )
             .unwrap();
         let (loaded, entries, status) = storage.load();
         assert!(status.is_empty() && !loaded.clear_on_exit);
         assert_eq!(entries[0].name, "missing.pdf");
+        assert_eq!(entries[1].text.as_deref(), Some("  Halo \nbaris dua\n"));
         fs::write(&storage.entries, "{broken").unwrap();
         let (_, entries, status) = storage.load();
         assert!(entries.is_empty() && !status.is_empty());

@@ -99,7 +99,7 @@ impl Ui {
             .0,
             Some("empty"),
         );
-        let (drag, _) = placeholder(DROP, "Drop files to add", "");
+        let (drag, _) = placeholder(DROP, "Drop files or text to add", "");
         drag.add_css_class("drop-active");
         drag.set_can_target(false);
         drag.set_visible(false);
@@ -304,7 +304,7 @@ impl Ui {
                         Ok(_) => incoming.finish(gdk::DragAction::empty()),
                         Err(error) => {
                             incoming.finish(gdk::DragAction::empty());
-                            ui.show_status(&format!("Could not read dropped files ({error})"));
+                            ui.show_status(&format!("Could not read dropped items ({error})"));
                         }
                     }
                 });
@@ -378,17 +378,27 @@ impl Ui {
                     vec![uri.clone()]
                 };
                 let entries = ui.entries_for(&selected);
+                let lead = entries.iter().find(|entry| entry.uri == uri)?;
+                let entries: Vec<_> = entries
+                    .iter()
+                    .filter(|entry| entry.text.is_some() == lead.text.is_some())
+                    .collect();
                 if entries.is_empty() || entries.iter().any(|entry| entry.missing) {
                     ui.show_status("Could not start drag. A selected file is unavailable.");
                     return None;
                 }
-                let files: Vec<_> = entries.iter().map(Entry::file).collect();
-                let lead = entries
-                    .iter()
-                    .find(|entry| entry.uri == uri)
-                    .unwrap_or(&entries[0]);
-                preview.replace(Some(drag_preview(lead, files.len())));
-                Some(transfer::provider(&files))
+                preview.replace(Some(drag_preview(lead, entries.len())));
+                if lead.text.is_some() {
+                    let text = entries
+                        .iter()
+                        .filter_map(|entry| entry.text.as_deref())
+                        .collect::<Vec<_>>()
+                        .join("\n");
+                    Some(transfer::text_provider(&text))
+                } else {
+                    let files: Vec<_> = entries.iter().map(|entry| entry.file()).collect();
+                    Some(transfer::provider(&files))
+                }
             }
         ));
         drag.connect_drag_begin(move |_, drag| {
@@ -511,9 +521,14 @@ impl Ui {
                     break;
                 };
                 let generation = ui.generation.get();
+                let mut entries = Vec::new();
                 let files = match data {
                     transfer::DropData::Files(files) if files.is_empty() => continue,
                     transfer::DropData::Files(files) => files,
+                    transfer::DropData::Text(entry) => {
+                        entries.push(Ok(entry));
+                        Vec::new()
+                    }
                     transfer::DropData::Image(image) => {
                         if ui.shelf.borrow().entries.len() >= ui.prefs.get().max_items {
                             ui.show_status("The shelf is full.");
@@ -531,7 +546,6 @@ impl Ui {
                         }
                     }
                 };
-                let mut entries = Vec::new();
                 for file in files {
                     if generation != ui.generation.get() {
                         break;
@@ -575,7 +589,7 @@ impl Ui {
         glib::spawn_future_local(async move {
             let mut changed = false;
             for entry in entries {
-                let missing = shelf::inspect(&entry.file()).await.is_err();
+                let missing = entry.text.is_none() && shelf::inspect(&entry.file()).await.is_err();
                 if missing != entry.missing
                     && let Some(current) = ui
                         .shelf
@@ -674,7 +688,7 @@ impl Ui {
         self.flow.set_row_spacing(if prefs.grid { 8 } else { 3 });
         let count = entries.len();
         self.counter.set_text(&count.to_string());
-        set_label(&self.counter, &file_count(count));
+        set_label(&self.counter, &item_count(count));
         self.clear.set_sensitive(count > 0);
         let mut refocus = None;
         for entry in &entries {
@@ -733,7 +747,7 @@ impl Ui {
         text.set_hexpand(true);
         text.set_valign(gtk::Align::Center);
         let split = Path::new(&entry.name);
-        let shown_name = if compact {
+        let shown_name = if compact || entry.text.is_some() {
             entry.name.as_str()
         } else {
             split
@@ -755,6 +769,8 @@ impl Ui {
             .map(str::to_uppercase);
         let details = if entry.missing {
             "File unavailable".into()
+        } else if entry.text.is_some() {
+            "Plain text".into()
         } else if compact {
             size.unwrap_or_else(|| "Unknown size".into())
         } else {
@@ -848,6 +864,10 @@ impl Ui {
         let group = gio::SimpleActionGroup::new();
         let items = gio::Menu::new();
         let removal = gio::Menu::new();
+        let is_text = self
+            .entries_for(std::slice::from_ref(&uri))
+            .first()
+            .is_some_and(|entry| entry.text.is_some());
         for (name, label, icon, accel, action, single) in [
             (
                 "open",
@@ -882,6 +902,9 @@ impl Ui {
                 false,
             ),
         ] {
+            if single && is_text {
+                continue;
+            }
             let item = gio::SimpleAction::new(name, None);
             let targets = if single {
                 vec![uri.clone()]
@@ -942,9 +965,13 @@ impl Ui {
         if entries.is_empty() {
             return;
         }
+        if entries[0].text.is_some() && !matches!(action, Action::Copy) {
+            return;
+        }
         let ui = self.clone();
         glib::spawn_future_local(async move {
             let mut files = Vec::new();
+            let mut texts = Vec::new();
             let verb = match action {
                 Action::Open => "open",
                 Action::Reveal => "reveal",
@@ -952,6 +979,10 @@ impl Ui {
                 Action::Remove => unreachable!(),
             };
             for entry in entries {
+                if let Some(text) = entry.text {
+                    texts.push(text);
+                    continue;
+                }
                 let file = entry.file();
                 if shelf::inspect(&file).await.is_err() {
                     if let Some(current) = ui
@@ -981,16 +1012,26 @@ impl Ui {
                 Action::Reveal => transfer::reveal(&files[0], context.upcast_ref())
                     .await
                     .map_err(|error| error.to_string()),
-                Action::Copy => display
-                    .clipboard()
-                    .set_content(Some(&transfer::clipboard_provider(&files)))
-                    .map_err(|error| error.to_string()),
+                Action::Copy => {
+                    let mut providers = Vec::new();
+                    if !files.is_empty() {
+                        providers.push(transfer::clipboard_provider(&files));
+                    }
+                    if !texts.is_empty() {
+                        providers.push(transfer::text_provider(&texts.join("\n")));
+                    }
+                    let content = gdk::ContentProvider::new_union(&providers);
+                    display
+                        .clipboard()
+                        .set_content(Some(&content))
+                        .map_err(|error| error.to_string())
+                }
                 Action::Remove => unreachable!(),
             };
             if let Err(error) = result {
                 ui.show_status(&format!("Could not {verb} ({error})"));
             } else if matches!(action, Action::Copy) {
-                ui.show_status(&format!("Copied {}", file_count(files.len())));
+                ui.show_status(&format!("Copied {}", item_count(files.len() + texts.len())));
             }
         });
     }
@@ -1162,11 +1203,11 @@ fn placeholder(svg: &[u8], title: &str, description: &str) -> (gtk::Box, gtk::La
     (outer, description)
 }
 
-fn file_count(count: usize) -> String {
+fn item_count(count: usize) -> String {
     if count == 1 {
-        "1 file".into()
+        "1 item".into()
     } else {
-        format!("{count} files")
+        format!("{count} items")
     }
 }
 
