@@ -1,0 +1,173 @@
+.shelf-window {
+  background-color: transparent;
+  color: @shelf_text;
+}
+
+.shelf-root,
+.settings-root {
+  background: @shelf_bg;
+  border-radius: 0 0 12px 12px;
+}
+
+.shelf-header {
+  min-height: 48px;
+  background: @shelf_chrome;
+  color: @shelf_text;
+  border-bottom: 1px solid @shelf_border;
+  box-shadow: none;
+}
+
+.shelf-header .title {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.counter {
+  background: @shelf_selected;
+  color: @shelf_muted;
+  min-width: 24px;
+  min-height: 22px;
+  border-radius: 6px;
+  font-size: 11px;
+}
+
+.drop-area {
+  margin: 12px 13px;
+  padding: 9px;
+  border: 1px dashed @shelf_border;
+  border-radius: 10px;
+  background: @shelf_header;
+}
+
+.drop-active {
+  background: @shelf_selected;
+  border: 2px dashed @shelf_accent;
+}
+
+.empty-title {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.muted,
+.status {
+  color: @shelf_muted;
+  font-size: 11px;
+}
+
+.drop-active .muted {
+  color: @shelf_accent;
+}
+
+.files {
+  padding: 8px 9px;
+  color: @shelf_text;
+  background: transparent;
+}
+
+.file-row {
+  min-height: 34px;
+  padding: 6px 7px;
+  border-radius: 8px;
+  outline-offset: -2px;
+}
+
+.file-row.grid-file {
+  background: @shelf_surface;
+  padding: 8px 9px;
+  min-height: 75px;
+}
+
+.file-row:hover,
+.file-row:selected,
+.file-row.recent {
+  background: @shelf_selected;
+  color: @shelf_text;
+}
+
+.file-row:focus-visible,
+.shelf-window button:focus-visible,
+.shelf-window dropdown:focus-visible {
+  outline: 2px solid @shelf_accent;
+  outline-offset: -2px;
+}
+
+.file-name {
+  font-weight: 600;
+}
+
+.missing {
+  color: @shelf_danger;
+  font-size: 11px;
+}
+
+.remove-file {
+  min-width: 24px;
+  min-height: 24px;
+  padding: 1px;
+  color: @shelf_muted;
+}
+
+.remove-file:hover {
+  color: @shelf_danger;
+}
+
+.footer {
+  border-top: 1px solid @shelf_border;
+  padding: 4px 9px;
+  background-color: @shelf_chrome;
+  border-radius: 0 0 12px 12px;
+}
+
+.shelf-root {
+  background-color: transparent;
+}
+
+.drop-stack {
+  background-color: @shelf_bg;
+}
+
+.status {
+  padding: 4px 14px;
+  background-color: @shelf_bg;
+}
+
+.preferences {
+  padding: 16px 20px;
+}
+
+.appearance-settings {
+  border-left: 1px solid @shelf_border;
+  padding-left: 16px;
+}
+
+.section-title {
+  font-weight: 700;
+  font-size: 15px;
+  margin-bottom: 5px;
+}
+
+.segments button:checked {
+  color: @shelf_accent;
+  background: @shelf_selected;
+}
+
+.settings-root scale highlight,
+.settings-root switch:checked {
+  background: @shelf_accent;
+}
+
+.done {
+  color: @shelf_bg;
+  background: @shelf_accent;
+  font-weight: 700;
+  padding: 4px 17px;
+}
+
+.drag-preview {
+  padding: 8px 12px;
+  color: @shelf_text;
+  background: @shelf_surface;
+  border: 1px solid @shelf_border;
+  border-radius: 8px;
+}

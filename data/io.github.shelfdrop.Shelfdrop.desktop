@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Shelfdrop
+Comment=Keep files within reach while you move between apps
+Exec=shelfdrop
+Icon=io.github.shelfdrop.Shelfdrop
+Type=Application
+Terminal=false
+Categories=Utility;GTK;
+StartupNotify=true
